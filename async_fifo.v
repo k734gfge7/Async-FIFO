@@ -1,16 +1,16 @@
 module async_fifo #(
     parameter DATA_WIDTH = 32,
-    parameter ADDR_WIDTH = 7  // 2^7 = 128 depth
+    parameter ADDR_WIDTH = 8  
 )(
-    input  wire                  wr_clk,
-    input  wire                  rd_clk,
+    input  wire                  wclk,
+    input  wire                  rclk,
     input  wire                  rst_n,
     input  wire                  wr_en,
     input  wire                  rd_en,
-    input  wire [DATA_WIDTH-1:0] din,
-    output wire [DATA_WIDTH-1:0] dout,
-    output wire                  full,
-    output wire                  empty
+    input  wire [DATA_WIDTH-1:0] wdata,
+    output wire [DATA_WIDTH-1:0] rdata,
+    output wire                  wfull,
+    output wire                  rempty
 );
 
     // Write and read pointers
@@ -40,31 +40,31 @@ module async_fifo #(
     endfunction
 
     // Write pointer logic
-    always @(posedge wr_clk or negedge rst_n) begin
+    always @(posedge wclk or negedge rst_n) begin
         if (!rst_n)
             wr_ptr_bin <= 0;
-        else if (wr_en && !full)
+        else if (wr_en && !wfull)
             wr_ptr_bin <= wr_ptr_bin + 1;
     end
 
-    always @(posedge wr_clk) begin
+    always @(posedge wclk) begin
         wr_ptr_gray <= bin2gray(wr_ptr_bin);
     end
 
     // Read pointer logic
-    always @(posedge rd_clk or negedge rst_n) begin
+    always @(posedge rclk or negedge rst_n) begin
         if (!rst_n)
             rd_ptr_bin <= 0;
-        else if (rd_en && !empty)
+        else if (rd_en && !rempty)
             rd_ptr_bin <= rd_ptr_bin + 1;
     end
 
-    always @(posedge rd_clk) begin
+    always @(posedge rclk) begin
         rd_ptr_gray <= bin2gray(rd_ptr_bin);
     end
 
     // Synchronize write pointer into read clock domain
-    always @(posedge rd_clk or negedge rst_n) begin
+    always @(posedge rclk or negedge rst_n) begin
         if (!rst_n) begin
             wr_ptr_gray_rdclk1 <= 0;
             wr_ptr_gray_rdclk2 <= 0;
@@ -75,7 +75,7 @@ module async_fifo #(
     end
 
     // Synchronize read pointer into write clock domain
-    always @(posedge wr_clk or negedge rst_n) begin
+    always @(posedge wclk or negedge rst_n) begin
         if (!rst_n) begin
             rd_ptr_gray_wrclk1 <= 0;
             rd_ptr_gray_wrclk2 <= 0;
@@ -85,17 +85,17 @@ module async_fifo #(
         end
     end
 
-    // Full and empty flags
-    assign full  = (bin2gray(wr_ptr_bin + 1) == {~rd_ptr_gray_wrclk2[ADDR_WIDTH-1:ADDR_WIDTH-2], rd_ptr_gray_wrclk2[ADDR_WIDTH-3:0]});
-    assign empty = (rd_ptr_gray == wr_ptr_gray_rdclk2);
+    // wfull and rempty flags
+    assign wfull  = (bin2gray(wr_ptr_bin + 1) == {~rd_ptr_gray_wrclk2[ADDR_WIDTH-1:ADDR_WIDTH-2], rd_ptr_gray_wrclk2[ADDR_WIDTH-3:0]});
+    assign rempty = (rd_ptr_gray == wr_ptr_gray_rdclk2);
 
     // Memory write
-    always @(posedge wr_clk) begin
-        if (wr_en && !full)
-            mem[wr_ptr_bin] <= din;
+    always @(posedge wclk) begin
+        if (wr_en && !wfull)
+            mem[wr_ptr_bin] <= wdata;
     end
 
     // Memory read
-    assign dout = mem[rd_ptr_bin];
+    assign rdata = mem[rd_ptr_bin];
 
 endmodule
